@@ -26,142 +26,6 @@ static char *rcsid =
  * unlikely value (if some clod on the destination is using that
  * value, it can be changed with the -p flag).
  *
- * A sample use might be:
- *
- *     [yak 71]% traceroute nis.nsf.net.
- *     traceroute to nis.nsf.net (35.1.1.48), 30 hops max, 56 byte packet
- *      1  helios.ee.lbl.gov (128.3.112.1)  19 ms  19 ms  0 ms
- *      2  lilac-dmc.Berkeley.EDU (128.32.216.1)  39 ms  39 ms  19 ms
- *      3  lilac-dmc.Berkeley.EDU (128.32.216.1)  39 ms  39 ms  19 ms
- *      4  ccngw-ner-cc.Berkeley.EDU (128.32.136.23)  39 ms  40 ms  39 ms
- *      5  ccn-nerif22.Berkeley.EDU (128.32.168.22)  39 ms  39 ms  39 ms 
- *      6  128.32.197.4 (128.32.197.4)  40 ms  59 ms  59 ms
- *      7  131.119.2.5 (131.119.2.5)  59 ms  59 ms  59 ms
- *      8  129.140.70.13 (129.140.70.13)  99 ms  99 ms  80 ms
- *      9  129.140.71.6 (129.140.71.6)  139 ms  239 ms  319 ms
- *     10  129.140.81.7 (129.140.81.7)  220 ms  199 ms  199 ms
- *     11  nic.merit.edu (35.1.1.48)  239 ms  239 ms  239 ms
- *
- * Note that lines 2 & 3 are the same.  This is due to a buggy
- * kernel on the 2nd hop system -- lbl-csam.arpa -- that forwards
- * packets with a zero ttl.
- *
- * A more interesting example is:
- *
- *     [yak 72]% traceroute allspice.lcs.mit.edu.
- *     traceroute to allspice.lcs.mit.edu (18.26.0.115), 30 hops max
- *      1  helios.ee.lbl.gov (128.3.112.1)  0 ms  0 ms  0 ms
- *      2  lilac-dmc.Berkeley.EDU (128.32.216.1)  19 ms  19 ms  19 ms
- *      3  lilac-dmc.Berkeley.EDU (128.32.216.1)  39 ms  19 ms  19 ms
- *      4  ccngw-ner-cc.Berkeley.EDU (128.32.136.23)  19 ms  39 ms  39 ms
- *      5  ccn-nerif22.Berkeley.EDU (128.32.168.22)  20 ms  39 ms  39 ms
- *      6  128.32.197.4 (128.32.197.4)  59 ms  119 ms  39 ms
- *      7  131.119.2.5 (131.119.2.5)  59 ms  59 ms  39 ms
- *      8  129.140.70.13 (129.140.70.13)  80 ms  79 ms  99 ms
- *      9  129.140.71.6 (129.140.71.6)  139 ms  139 ms  159 ms
- *     10  129.140.81.7 (129.140.81.7)  199 ms  180 ms  300 ms
- *     11  129.140.72.17 (129.140.72.17)  300 ms  239 ms  239 ms
- *     12  * * *
- *     13  128.121.54.72 (128.121.54.72)  259 ms  499 ms  279 ms
- *     14  * * *
- *     15  * * *
- *     16  * * *
- *     17  * * *
- *     18  ALLSPICE.LCS.MIT.EDU (18.26.0.115)  339 ms  279 ms  279 ms
- *
- * (I start to see why I'm having so much trouble with mail to
- * MIT.)  Note that the gateways 12, 14, 15, 16 & 17 hops away
- * either don't send ICMP "time exceeded" messages or send them
- * with a ttl too small to reach us.  14 - 17 are running the
- * MIT C Gateway code that doesn't send "time exceeded"s.  God
- * only knows what's going on with 12.
- *
- * The silent gateway 12 in the above may be the result of a bug in
- * the 4.[23]BSD network code (and its derivatives):  4.x (x <= 3)
- * sends an unreachable message using whatever ttl remains in the
- * original datagram.  Since, for gateways, the remaining ttl is
- * zero, the icmp "time exceeded" is guaranteed to not make it back
- * to us.  The behavior of this bug is slightly more interesting
- * when it appears on the destination system:
- *
- *      1  helios.ee.lbl.gov (128.3.112.1)  0 ms  0 ms  0 ms
- *      2  lilac-dmc.Berkeley.EDU (128.32.216.1)  39 ms  19 ms  39 ms
- *      3  lilac-dmc.Berkeley.EDU (128.32.216.1)  19 ms  39 ms  19 ms
- *      4  ccngw-ner-cc.Berkeley.EDU (128.32.136.23)  39 ms  40 ms  19 ms
- *      5  ccn-nerif35.Berkeley.EDU (128.32.168.35)  39 ms  39 ms  39 ms
- *      6  csgw.Berkeley.EDU (128.32.133.254)  39 ms  59 ms  39 ms
- *      7  * * *
- *      8  * * *
- *      9  * * *
- *     10  * * *
- *     11  * * *
- *     12  * * *
- *     13  rip.Berkeley.EDU (128.32.131.22)  59 ms !  39 ms !  39 ms !
- *
- * Notice that there are 12 "gateways" (13 is the final
- * destination) and exactly the last half of them are "missing".
- * What's really happening is that rip (a Sun-3 running Sun OS3.5)
- * is using the ttl from our arriving datagram as the ttl in its
- * icmp reply.  So, the reply will time out on the return path
- * (with no notice sent to anyone since icmp's aren't sent for
- * icmp's) until we probe with a ttl that's at least twice the path
- * length.  I.e., rip is really only 7 hops away.  A reply that
- * returns with a ttl of 1 is a clue this problem exists.
- * Traceroute prints a "!" after the time if the ttl is <= 1.
- * Since vendors ship a lot of obsolete (DEC's Ultrix, Sun 3.x) or
- * non-standard (HPUX) software, expect to see this problem
- * frequently and/or take care picking the target host of your
- * probes.
- *
- * Other possible annotations after the time are !H, !N, !P (got a host,
- * network or protocol unreachable, respectively), !S or !F (source
- * route failed or fragmentation needed -- neither of these should
- * ever occur and the associated gateway is busted if you see one).  If
- * almost all the probes result in some kind of unreachable, traceroute
- * will give up and exit.
- *
- * Notes
- * -----
- * This program must be run by root or be setuid.  (I suggest that
- * you *don't* make it setuid -- casual use could result in a lot
- * of unnecessary traffic on our poor, congested nets.)
- *
- * This program requires a kernel mod that does not appear in any
- * system available from Berkeley:  A raw ip socket using proto
- * IPPROTO_RAW must interpret the data sent as an ip datagram (as
- * opposed to data to be wrapped in a ip datagram).  See the README
- * file that came with the source to this program for a description
- * of the mods I made to /sys/netinet/raw_ip.c.  Your mileage may
- * vary.  But, again, ANY 4.x (x < 4) BSD KERNEL WILL HAVE TO BE
- * MODIFIED TO RUN THIS PROGRAM.
- *
- * The udp port usage may appear bizarre (well, ok, it is bizarre).
- * The problem is that an icmp message only contains 8 bytes of
- * data from the original datagram.  8 bytes is the size of a udp
- * header so, if we want to associate replies with the original
- * datagram, the necessary information must be encoded into the
- * udp header (the ip id could be used but there's no way to
- * interlock with the kernel's assignment of ip id's and, anyway,
- * it would have taken a lot more kernel hacking to allow this
- * code to set the ip id).  So, to allow two or more users to
- * use traceroute simultaneously, we use this task's pid as the
- * source port (the high bit is set to move the port number out
- * of the "likely" range).  To keep track of which probe is being
- * replied to (so times and/or hop counts don't get confused by a
- * reply that was delayed in transit), we increment the destination
- * port number before each probe.
- *
- * Tim Seaver, Ken Adelman and C. Philip Wood provided bug fixes and/or
- * enhancements to the original distribution.
- *
- * I've hacked up a round-trip-route version of this that works by
- * sending a loose-source-routed udp datagram through the destination
- * back to yourself.  Unfortunately, SO many gateways botch source
- * routing, the thing is almost worthless.  Maybe one day...
- *
- *  -- Van Jacobson (van@helios.ee.lbl.gov)
- *     Tue Dec 20 03:50:13 PST 1988
- *
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
  *
@@ -350,7 +214,6 @@ unsigned long getsrcip ()
    bzero(device,sizeof(device));
    hp = gethostbyname(a);
    struct sockaddr_in to;
-   printf("%s %d\n",hp->h_addr, hp->h_length);                                                                                       
       
    bcopy(hp->h_addr, (caddr_t)&to.sin_addr, hp->h_length);
    while (fgets(buf, sizeof(buf), f) != NULL) {
@@ -358,7 +221,8 @@ unsigned long getsrcip ()
                     if (n == 1 && strncmp(buf, "Iface", 5) == 0)
                            continue;
                     i = sscanf(buf, "%255s %x %*s %*s %*s %*s %*s %x",tdevice, &dest, &tmask);
-                    printf("%s %d %d\n",tdevice, dest, mask);
+                    if(verbose)
+                             printf("%s %d %d\n",tdevice, dest, mask);
 //                    if (i != 3)
 //                           bb_error_msg_and_die("junk in buffer");
                     if ((to.sin_addr.s_addr & tmask) == dest
@@ -371,12 +235,12 @@ unsigned long getsrcip ()
      if (device[0] == '\0')
         printf("can't find interface\n");
                                                                                                                                                                                                                                                                                                                                                     
-   printf("%d\n",NI_MAXHOST);   
+   if(verbose) 
+           printf("%d\n",NI_MAXHOST);   
    if (getifaddrs(&ifaddr) == -1) {
                 perror("getifaddrs");
                 exit(EXIT_FAILURE);
                }
-        printf("ifaddr %s\n",ifaddr->ifa_name);                            
    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
    {if (ifa->ifa_addr == NULL)
       continue;
@@ -392,11 +256,13 @@ unsigned long getsrcip ()
                 if (strcmp(device, ifa->ifa_name) == 0)
                        { inet_aton(host, &to.sin_addr);
 //                         to.sin_addr.s_addr=(in_addr_t)(ifa->ifa_addr->sa_data);
-                          printf("%d %s\n",to.sin_addr.s_addr, inet_ntoa(to.sin_addr));
+                          if(verbose)
+                                  printf("%d %s\n",to.sin_addr.s_addr, inet_ntoa(to.sin_addr));
                        }       
                 strcpy(localh[locind],host);
                 locind++;
-                printf("<Interface>: %s \t <Address> %s\n", ifa->ifa_name, host);
+                if(verbose)
+                        printf("<Interface>: %s \t <Address> %s\n", ifa->ifa_name, host);
                 if(locind>=10) {printf("More local addresses than allocated, skip the rest\n");
                                 return to.sin_addr.s_addr;
                                } 
@@ -411,7 +277,6 @@ int is_valid_ip(const char *ip_str)
         unsigned int n1,n2,n3,n4;
         int i;        
         if(sscanf(ip_str,"%u.%u.%u.%u", &n1, &n2, &n3, &n4) != 4) return 0;
-        printf("addr to validate %s\n",ip_str);
         if(n1==127) return 0; //127/8
         
         if(n1==10) return 0;//10/8
@@ -475,7 +340,7 @@ int id;
 	if (i < 0 || i != datalen[id])  {
 		if (i<0)
 			perror("sendto");
-		Printf("traceroute to %s: wrote %d chars, ret=%d\n",to,datalen[id], i);
+//		Printf("traceroute to %s: wrote %d chars, ret=%d\n",to,datalen[id], i);
 		(void) fflush(stdout);
 	}
 	return 0;
@@ -532,7 +397,6 @@ int id;
 	 ip->ip_len= sizeof(struct ip)+icmp_hdr_n_data_len;
 	 
 	up->icmp_cksum = in_cksum((u_short *)up,icmp_hdr_n_data_len);
-	printf("ttl %d checksum %d\n",ttl,up->icmp_cksum);
         if (up->icmp_cksum == 0)
            up->icmp_cksum = 0xffff;
 	                                                            
@@ -540,10 +404,10 @@ int id;
 	i = sendto(sndsock[id], (char *)outicpacket[id], datalen[id], 0, &whereto[id],
 		   sizeof(struct sockaddr));
 	if (i < 0 || i != datalen[id])  {
-	        printf("i %d %d\n",i,up->icmp_cksum);
 		if (i<0)
 			perror("sendto");
-		Printf("ICMP traceroute to %s: wrote %d chars, ret=%d\n",to,datalen[id], i);
+                if(verbose)
+        		Printf("ICMP traceroute to %s: wrote %d chars, ret=%d\n",to,datalen[id], i);
 		(void) fflush(stdout);
 	}
 	 if (verbose) {
@@ -711,9 +575,6 @@ void checkfile(char * logfile,int id)
     system(line);
     return; //nothing here yet
   }     
-// char log[200]; 
-// sprintf(log,"%s%d",TRACE_FILENAME,id);
- printf("%s\n",logfile);
  if(stat(logfile,&st) ==0 ) //update file exists
   {if(st.st_size==0) 
    {printf("%s size is zero\n",logfile);
@@ -725,48 +586,20 @@ void checkfile(char * logfile,int id)
       } 
  time_t tim=time(NULL);
  struct tm * now=localtime(&tim);
- printf("Date is %d/%02d/%02d\n", now->tm_year+1900, now->tm_mon+1, now->tm_mday);
- printf("Time is %02d:%02d\n", now->tm_hour, now->tm_min);
+ if(verbose)
+ {printf("Date is %d/%02d/%02d\n", now->tm_year+1900, now->tm_mon+1, now->tm_mday);
+  printf("Time is %02d:%02d\n", now->tm_hour, now->tm_min);
+ } 
  bzero(line,sizeof(line));
  char log[200];
  sprintf(log,"/tmp/passive-trace-files/`cat /etc/bismark/ID`_th%d_date%d_%02d-%02d-%02d_%02d_%02d.tar",id,now->tm_year+1900,now->tm_mon+1,now->tm_mday,now->tm_hour, now->tm_min,now->tm_sec);
-// sprintf(line,"tar cvfP /tmp/passive-trace-files/`cat /etc/bismark/ID`_`date%d_%02d-%02d-%02d_%02d_%02d`.tar %s",now->tm_year+1900,now->tm_mon+1,now->tm_mday,now->tm_hour, now->tm_min,now->tm_sec,logfile);
  sprintf(line,"tar cvf %s %s",log,logfile);
- printf("%s\n",line);
  system(line);
-// char key[50]="/etc/bismark/bismark_key";
-// char user[10]="bismark";
  char key[50]="/etc/dropbear/dropbear_rsa_host_key";
  char user[10]="nazanin";
  char server[50]="prober.projectbismark.net";
  sprintf(line,"scp -S \"/tmp/bismark/ssh\" -i %s %s %s@%s:var/data/passive/trace && (rm %s; rm %s)",key,log,user,server,log,logfile);  
- printf("line %s\n",line);
  system(line);
-// #. /etc/bismark/bismark.conf
- 
-//       (cd $STAGING_DIR && tar cvf $MANIFEST_FILE *.gz)
-// sprintf(line,"scp -S \"/usr/bin/ssh\" -i $SSH_KEY %s $USER@$SERVER:var/data/passive && (rm %s;)",log,log);
-//       fi
-       
-// sprintf(line,"sh passive-submit.sh %s",logfile);
-// printf("%s\n",line);
-// system(line);
- 
- /*FILE * fp = fopen(logfile, "r");
- if (fp == NULL) {
-   fprintf(stderr, "Can't open output file %s!\n", logfile);
-             return;
-             }
-            
- char line[65536];
- int sind=0; 
- while (fgets(line, sizeof line, fp) !=NULL){
-         sind++;
-         break;
- }
- if(sind>0)                                                                                          
-  //call scp
-  */
 }
 
 int whois(char * dest,int id)
@@ -776,7 +609,6 @@ int whois(char * dest,int id)
  bzero(line,sizeof(line)); 
  char regex []= "\"\\b(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\b\"";
    
- //sprintf(line,"whois -h whois.cymru.com \" -p -o %s\" | cut -d '|' -f 3 | egrep %s | tr / ' ' > sub%d",dest,regex,id);
  sprintf(line,"echo \"-p -o %s\" | netcat whois.cymru.com 43 | cut -d '|' -f 3 | egrep %s | tr / ' ' > sub%d",dest,regex,id);                   
  system(line);
  return 0;
@@ -807,10 +639,6 @@ int Extract(id)
         char line[65536];
         char *lpt;
              
-/*	while (fgets(line, sizeof line, fp) !=NULL){
-	sind++;
-	}*/
-//	printf("number of flows %d\n",sind);                
 	rewind(fp);
         bzero(line,sizeof(line));
 
@@ -835,26 +663,20 @@ int Extract(id)
          {int fl,k,l;
           sscanf(lpt,"%d",&fl);
           sprintf(pt,"%d",fl);
-        //  printf("lpt %s\n",lpt);
           lpt++;
           lpt=lpt+strlen(pt);
                    
           sscanf(lpt,"%" PRIx32,&tmp);
           sprintf(pt,"%" PRIx32,tmp);
-//          printf("lpt %s\n",lpt);
           lpt++;
           lpt=lpt+strlen(pt);
-       //   printf("%s %u\n",lpt,tmp);
                     
           checkad_s.s_addr=htonl(tmp);
-        //  printf("%u %u\n",tmp,checkad_s.s_addr);
                   
           sscanf(lpt,"%" PRIx32,&tmp);
           sprintf(pt,"%" PRIx32 ,tmp); 
-      //    printf("%s %u\n",lpt,tmp);
           
           checkad_d.s_addr =htonl(tmp);
-        //  printf("%u %u\n",tmp,checkad_d.s_addr);
           
           k=is_valid_ip(inet_ntoa((struct in_addr)checkad_d));
           l=is_valid_ip(inet_ntoa((struct in_addr)checkad_s));          
@@ -866,55 +688,34 @@ int Extract(id)
           flowid[id][ind]=fl;
 	  if(k==1) {if(checkid(src[id],checkad_d.s_addr,ind))
 	            {src[id][ind]=checkad_d.s_addr;
-	             printf("%d.%d.%d.%d\n",IP_QUAD(src[id][ind]));
 	             ind++;
 	            }  
 	           }          
 	  if(l==1) {if(checkid(src[id],checkad_s.s_addr,ind)) 
 	            {src[id][ind]=checkad_s.s_addr;
-               	     printf("%d.%d.%d.%d\n",IP_QUAD(src[id][ind]));
           	     ind++;
           	    }
           	   }  
-/*	  lpt++;
-	  lpt=lpt+strlen(pt);
-	  sscanf(lpt,"%" PRIx32,&dest[ind]);  
-          sprintf(pt,"%" PRIx32,dest[ind++]);  */
           bzero(line,sizeof(line));
          } 
 	}
-	printf("number of flows %d\n",ind);
-return ind;
+	if(verbose)
+	        printf("number of flows %d\n",ind);
+        return ind;
 }
 
-/*const char *byte_to_binary(int x) {
-        static char b[9];
-        b[0] = '\0';
-            
-        int z;
-        for (z = 256; z > 0; z >>= 1)
-         strcat(b, ((x & z) == z) ? "1" : "0");                                    
-         return b;
-}*/
-                                        
 int is_ip_in_net(struct in_addr from,char * netmask,unsigned long mask)
 {	
-        printf("in is_ip\n");
         if(mask<=0 || mask>32) {printf("wrong mask %lu\n",mask); return 0;}
         unsigned long nm2;
         nm2 = ~((1 << (32 - mask)) - 1);
-        printf("%lu %lx\n",nm2,nm2);
         struct sockaddr_in nw;
         inet_aton((char *)netmask,&nw.sin_addr);
         unsigned long ip=ntohl(from.s_addr);
         unsigned long net=ntohl(nw.sin_addr.s_addr);
-        printf("broadcast %s %s %lu\n",inet_ntoa(from),netmask, nm2);
-        printf("broadcast %lu %lu %lx %lx\n",(long unsigned)from.s_addr,(long unsigned)nw.sin_addr.s_addr,(long unsigned)from.s_addr,(long unsigned)nw.sin_addr.s_addr);
-        printf("broadcast %lu %lu %lx %lx\n",(long unsigned)ntohl(from.s_addr), (long unsigned)ntohl(nw.sin_addr.s_addr),(long unsigned)ntohl(from.s_addr), (long unsigned)ntohl(nw.sin_addr.s_addr));      
         unsigned long network1=(ip & nm2);
         unsigned long network2=(net & nm2);
                   
-        printf("broadcast %lx %lx %lu %lu %lx %lx\n",(ip & nm2), (net & nm2), ip|nm2, net|nm2,ip|nm2, net|nm2); 
         if(network1==network2)// reach to the destination network
                 return 1;
         else return 0;        
@@ -987,14 +788,12 @@ int main(argc, argv)
 	nextarg:
 		argc--, av++;
 	}
-	printf("arg %d\n",argc);
 	if (argc!=0)  {
 		Printf(usage);
 		exit(1);
 	}
 	setlinebuf (stdout);
         wherefrom.sin_addr.s_addr=getsrcip();
-        printf("wherefrom %s \n",inet_ntoa(wherefrom.sin_addr));
 	int fd,wd;
 	fd = inotify_init ();
 	if(fd<0)
@@ -1046,7 +845,8 @@ int main(argc, argv)
 	              struct inotify_event *event;
 	             
                       event = (struct inotify_event *) &buf[count];
-                      printf ("wd=%d mask=%u cookie=%u len=%u\n",event->wd, event->mask,event->cookie, event->len);
+                      if(verbose)
+                              printf ("wd=%d mask=%u cookie=%u len=%u\n",event->wd, event->mask,event->cookie, event->len);
                       if(event->len) printf ("name=%s\n", event->name);
                      
                       count += EVENT_SIZE + event->len;
@@ -1070,11 +870,7 @@ int main(argc, argv)
 	             thr_data[idle].tid=idle;
 	             thr_data[idle].tos=&tos;
                      pthread_create(&tids[idle], NULL, StartTrace,&thr_data[idle] );
-	             printf("after create %d\n",idle);
                      pthread_detach(tids[idle]);
-//                     pthread_join(tids[idle], NULL);
-//	             StartTrace(optlist, oix, &tos);
-//                     printf("Thread id %d returned\n",idle);
 	           }
         	 } 
 	                       
@@ -1093,11 +889,10 @@ void * StartTrace(void *arg)
        bzero(filename,sizeof(filename));
 //       checkfile(filename,id);              
        sprintf( filename, "%s%u", TRACE_FILENAME, id );
-       printf("%s\n",filename);
        checkfile(filename,id);
 	int ct=Extract(id);
 	gzFile hd;
-	if(ct>0) {printf("ct %d\n",ct); 
+	if(ct>0) {
 	          hd = gzopen (filename, "wb");
 	
                   if (!hd) {
@@ -1116,7 +911,6 @@ void * StartTrace(void *arg)
                 
         int on = 1;
         datalen[id]=0;        	
-        printf("id %d %u\n",id,id);
 	for(k=0;k<ct;k++)
 	{
                 seq=0;
@@ -1126,7 +920,6 @@ void * StartTrace(void *arg)
                 char line[200];
                 bzero(line,sizeof(line));
                 whois(inet_ntoa(to->sin_addr),id);
-                printf("id %d %u\n",id,id);
                         
                 char SUB[100];
                 bzero(SUB,sizeof(SUB));
@@ -1138,11 +931,11 @@ void * StartTrace(void *arg)
                 if(dhd==NULL) printf("error opening file %s\n",SUB);
                 else if(fgets(line,sizeof line, dhd) !=NULL){
                   sscanf(line,"%s %u",netmask,&mask);
-                }             
-                printf("network: %s mask:%u\n",netmask,mask);
+                }      
+                if(verbose)       
+                        printf("network: %s mask:%u\n",netmask,mask);
                 datalen[id]=0;
                 datalen[id] += sizeof(struct opacket);
-        	printf("datalen %d\n",datalen[id]);	
         	outpacket[id] = (struct opacket *)malloc((unsigned)datalen[id]);
         	if (! outpacket[id]) {
  	        	perror("traceroute: malloc");
@@ -1163,7 +956,6 @@ void * StartTrace(void *arg)
                 
         	ident[id] = ((getpid()+id) & 0xffff) | 0x8000;
                 port[id]= stport+max_ttl*id;
-                printf("id %d ident %d port %d\n",id,ident[id],port[id]);
                 
         	if ((pe = getprotobyname("icmp")) == NULL) {
 		        Fprintf(stderr, "icmp: unknown protocol\n");
@@ -1195,8 +987,10 @@ void * StartTrace(void *arg)
         		}
 #endif 
 
-        	
+        	#ifdef DISABLE_ANONYMIZATION
         	gzprintf(hd, "traceroute to %s %d\n",inet_ntoa(to->sin_addr),flowid[id][k]);
+        	#endif 
+        	
         	(void) fflush(stderr);
 
         	for (ttl = 1; ttl <= max_ttl; ++ttl) {
@@ -1221,23 +1015,22 @@ void * StartTrace(void *arg)
 				                ip = (struct ip *)packet;
         					double dt = deltaT(&tv,id);
 	        				if (!gotlastaddr || from->sin_addr.s_addr != lastaddr) {
-                                                    #ifndef DISABLE_ANONYMIZATION
+                                                    #ifdef DISABLE_ANONYMIZATION
                                                        print(packet, cc, from, hd);     
                                                     #else
-                                                     if(!is_ip_in_net(from->sin_addr,netmask,mask))//reaches network?
-                                                     print(packet, cc, from, hd);
+                                                       if(!is_ip_in_net(from->sin_addr,netmask,mask))//reaches network?
+                                                             print(packet, cc, from, hd);
         	                                    #endif    
                                                      lastaddr = from->sin_addr.s_addr;              
                                                      ++gotlastaddr;
                                                      }					                                                                                                                                                                                            
-				        	gzprintf(hd,"  %f ms", dt);
+				        	gzprintf(hd,"  %f ", dt);
 				        	if (i == -2) {
 			                               if (ip->ip_ttl <= 1)
                                                        printf(" !");
 	                                               ++got_there;
                                                         break;
                                                      }
-					                                                                                                                                                                                                        
 		        			switch(i - 1) {
 			        		case ICMP_UNREACH_PORT:
 #ifndef ARCHAIC
