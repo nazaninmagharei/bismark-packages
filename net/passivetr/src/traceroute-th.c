@@ -581,7 +581,8 @@ void checkfile(char * logfile,int id)
     return;//size is zero
    }
   }  
- else {printf("%s does not exist\n",logfile);
+ else {if(verbose) 
+         printf("%s does not exist\n",logfile);
        return;//does not exist
       } 
  time_t tim=time(NULL);
@@ -639,7 +640,6 @@ int Extract(id)
         char line[65536];
         char *lpt;
              
-	rewind(fp);
         bzero(line,sizeof(line));
 
         while (fgets(lpt = line, sizeof line, fp)!=NULL){
